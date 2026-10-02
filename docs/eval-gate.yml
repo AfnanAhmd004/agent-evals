@@ -1,0 +1,18 @@
+# Example: block a merge when the agent regresses. Copy into .github/workflows/ of your agent repo.
+name: agent-eval-gate
+on: pull_request
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e . agent-evals
+      # baseline = the target branch, candidate = this PR
+      - run: |
+          git worktree add ../base origin/${{ github.base_ref }}
+          (cd ../base && pip install -e . && agent-evals run suites/main.json --agent my_agent:run --trials 5 --out $GITHUB_WORKSPACE/base.json)
+          agent-evals run suites/main.json --agent my_agent:run --trials 5 --out cand.json
+      - run: agent-evals compare base.json cand.json --max-drop 0.02 --min-pass-rate 0.85 | tee -a $GITHUB_STEP_SUMMARY
